@@ -1,0 +1,58 @@
+---
+title: "Untitled"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(gt23)
+library(RMySQL)
+library(dplyr)
+#library(geneRxCluster)
+library(tidyr)
+library(kableExtra)
+#library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+#library(Homo.sapiens)
+#all_genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+dbConn  <- dbConnect(MySQL(), group='specimen_management')
+samples <- dbGetQuery(dbConn, 'select * from gtsp where Trial="CART19_CLL"')
+
+
+if(! file.exists('all_cll_intSites.rds')){
+intSites <- getDBgenomicFragments(samples$SpecimenAccNum, 'specimen_management', 'intsites_miseq') %>%
+  stdIntSiteFragments() %>%
+  collapseReplicatesCalcAbunds() %>%
+  annotateIntSites()
+  intSites <- data.frame(intSites) %>% filter(seqnames %in% paste0('chr', c(1:22, 'X'))) %>%
+    mutate(cellType=ifelse(cellType=='Whole blood','Whole Blood',cellType))
+  saveRDS(intSites,file='all_cll_intSites.rds')
+} else {
+  intSites <- readRDS('all_cll_intSites.rds')
+}
+
+# make a table summary of the samples
+kk2 <- group_by(data.frame(intSites), cellType,timePointMonths,GTSP) %>%
+  summarise(cellsPerSample = sum(estAbund)) %>%
+  arrange(cellType,timePointMonths)
+
+
+```
+
+```{r cars, echo=FALSE}
+group_by(data.frame(intSites),cellType,timePointMonths) %>%
+  summarise(cellsPerSample = sum(estAbund)) %>% arrange(timePointMonths) %>%
+  pivot_wider(names_from = cellType, values_from = cellsPerSample,values_fill=0) %>%
+  kable( "latex", booktabs = TRUE,caption = "total cell per timepoint/celltype") %>%
+  kable_styling(latex_options = c("striped", "scale_down"))
+```
+
+```{r tab2, echo=FALSE}
+group_by(data.frame(intSites),cellType,timePointMonths,GTSP) %>%
+  summarise() %>% group_by(cellType,timePointMonths) %>%
+  summarise(Sample_num = n()) %>%
+  arrange(timePointMonths) %>%
+  pivot_wider(names_from = cellType, values_from = Sample_num,values_fill=0) %>%
+  kable( "latex", booktabs = TRUE,caption = "total samples per timepoint/celltype") %>%
+  kable_styling(latex_options = c("striped", "scale_down"))
+```
